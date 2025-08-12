@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QWidget, QMainWindow, QSplitter, QTreeView,
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
 from PySide6.QtCore import QDate
 from models.document import Document
+from dialogs.document_view_gialog import DocumentViewDialog
 
 
 class RegistrarApp(QMainWindow):
@@ -47,8 +48,8 @@ class RegistrarApp(QMainWindow):
         # Actions menu
         actions_menu = menubar.addMenu("Действия")
         
-        check_expiring_action = QAction("Проверить истекающие договора", self)
-        check_expiring_action.triggered.connect(self.check_expiring_contracts)
+        check_expiring_action = QAction("Проверить истекающие договоры", self)
+        check_expiring_action.triggered.connect(self.show_expiring_contracts_dialog)
         actions_menu.addAction(check_expiring_action)
         
         search_action = QAction("Поиск", self)
@@ -318,22 +319,76 @@ class RegistrarApp(QMainWindow):
             df.to_excel(file_path, index=False)
             self.status_bar.showMessage(f"Документы экспортированы в {file_path}")
     
-    def check_expiring_contracts(self):
-        today = QDate.currentDate()
-        threshold = today.addDays(30)
-        expiring = []
-        
+    def show_expiring_contracts_dialog(self):
+        """Диалог для выбора порогового значения и показ результатов"""
+        days, ok = QInputDialog.getInt(
+            self,
+            "Проверка истекающих договоров",
+            "Введите пороговое количество дней:",
+            value=30,
+            min=1,
+            max=365
+        )
+    
+        if ok:
+            self.show_expiring_contracts(days)
+
+    def show_expiring_contracts(self, days_threshold=30):
+        """Показать истекающие договоры в правой панели"""
+        expiring_docs = []
+    
+        # Собираем все истекающие договоры
         for doc in self.folders["Договоры"]:
-            if doc.end_date and doc.end_date <= threshold:
-                expiring.append(doc)
-        
-        if expiring:
-            message = "Истекающие договоры:\n\n"
-            for doc in expiring:
-                message += f"{doc.number} - {doc.name} (до {doc.end_date.toString('dd.MM.yyyy')})\n"
-            QMessageBox.information(self, "Истекающие договоры", message)
-        else:
-            QMessageBox.information(self, "Истекающие договоры", "Нет договоров, истекающих в ближайшие 30 дней")
+            if doc.end_date and self.is_document_expiring(doc, days_threshold):
+                expiring_docs.append(doc)
+    
+        # Очищаем текущую таблицу
+        self.document_model.clear()
+        self.document_model.setHorizontalHeaderLabels([
+            "Номер", "Наименование", "Контрагент", "Дата окончания", "Дней осталось"
+        ])
+
+        # Заполняем таблицу
+        for doc in expiring_docs:
+            days_left = QDate.currentDate().daysTo(doc.end_date)
+            row = [
+                QStandardItem(doc.number),
+                QStandardItem(doc.name),
+                QStandardItem(doc.counterparty),
+                QStandardItem(doc.end_date.toString("dd.MM.yyyy")),
+                QStandardItem(str(days_left))
+            ]
+            self.document_model.appendRow(row)
+    
+        # Обновляем статус бар
+        count = len(expiring_docs)
+        self.status_bar.showMessage(
+            f"Найдено истекающих договоров: {count}. " 
+            f"Порог: {days_threshold} дней"
+        )
+    
+        # Подсветка строк с малым сроком
+        self.highlight_expiring_contracts()
+
+    def highlight_expiring_contracts(self):
+        """Подсветка строк в зависимости от оставшегося срока"""
+        for row in range(self.document_model.rowCount()):
+            days_item = self.document_model.item(row, 4)  # Столбец "Дней осталось"
+            if days_item:
+                days_left = int(days_item.text())
+                color = Qt.black  # По умолчанию
+            
+                if days_left <= 7:
+                    color = Qt.red
+                elif days_left <= 14:
+                    color = QColor(255, 165, 0)  # Оранжевый
+            
+                days_item.setForeground(color)
+                # Можно также подсветить всю строку:
+                for col in range(self.document_model.columnCount()):
+                    item = self.document_model.item(row, col)
+                    if item:
+                        item.setForeground(color)
     
     def show_search_dialog(self):
         dialog = SearchDialog(self)
