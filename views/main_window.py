@@ -1,10 +1,8 @@
-from operator import index
-from turtle import mode
 import pandas as pd
 
 from PySide6.QtWidgets import (QWidget, QMainWindow, QSplitter, QTreeView, 
                               QTableView, QStatusBar, QFileDialog,
-                              QDialog, QVBoxLayout, QHBoxLayout,
+                              QDialog, QVBoxLayout, QHBoxLayout, QInputDialog,
                               QPushButton, QMessageBox, QAbstractItemView)
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
 from PySide6.QtCore import QDate, Qt
@@ -12,7 +10,6 @@ from models.document import Document
 from dialogs.document_view_dialog import DocumentViewDialog
 from dialogs.document_edit_dialog import DocumentEditDialog
 from dialogs.search_dialog import SearchDialog
-from utils.date_utils import is_document_expiring, format_days_left
 
 
 class RegistrarApp(QMainWindow):
@@ -71,7 +68,7 @@ class RegistrarApp(QMainWindow):
         license_action = QAction("Лицензия", self)
         license_action.triggered.connect(self.show_license)
         help_menu.addAction(license_action)
-    
+
     def create_main_widgets(self):
         main_splitter = QSplitter()
         
@@ -118,7 +115,7 @@ class RegistrarApp(QMainWindow):
         
         # Buttons
         buttons_layout = QHBoxLayout()
-        
+
         self.add_button = QPushButton("Добавить")
         self.add_button.clicked.connect(self.add_document)
         buttons_layout.addWidget(self.add_button)
@@ -141,7 +138,7 @@ class RegistrarApp(QMainWindow):
         main_splitter.setSizes([200, 800])
         
         self.setCentralWidget(main_splitter)
-    
+
     def create_status_bar(self):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -336,8 +333,8 @@ class RegistrarApp(QMainWindow):
             "Проверка истекающих договоров",
             "Введите пороговое количество дней:",
             value=30,
-            min=1,
-            max=365
+            minValue=1,
+            maxValue=365
         )
     
         if ok:
@@ -349,7 +346,7 @@ class RegistrarApp(QMainWindow):
     
         # Собираем все истекающие договоры
         for doc in self.folders["Договоры"]:
-            if doc.end_date and self.is_document_expiring(doc, days_threshold):
+            if doc.is_document_expiring(days_threshold):
                 expiring_docs.append(doc)
     
         # Очищаем текущую таблицу
@@ -407,6 +404,10 @@ class RegistrarApp(QMainWindow):
             self.perform_search(search_params)
     
     def perform_search(self, params):
+        if params.get("special_search") == "expiring_contracts":
+            self.show_expiring_contracts(params.get("days_threshold", 30))
+            return
+        
         results = []
         
         for folder_name, documents in self.folders.items():

@@ -12,7 +12,7 @@ class Document:
         self.description = description
         self.attachments = attachments or []
 
-    def is_expiring(self, days_threshold=30):
+    def is_document_expiring(self, days_threshold=30):
         if not self.end_date:
             return False
         return self.end_date.daysTo(QDate.currentDate()) <= days_threshold
