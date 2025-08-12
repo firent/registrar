@@ -5,9 +5,12 @@ from PySide6.QtWidgets import (QWidget, QMainWindow, QSplitter, QTreeView,
                               QDialog, QVBoxLayout, QHBoxLayout,
                               QPushButton, QMessageBox, QAbstractItemView)
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, Qt
 from models.document import Document
-from dialogs.document_view_gialog import DocumentViewDialog
+from dialogs.document_view_dialog import DocumentViewDialog
+from dialogs.document_edit_dialog import DocumentEditDialog
+from dialogs.search_dialog import SearchDialog
+from utils.date_utils import is_document_expiring, format_days_left
 
 
 class RegistrarApp(QMainWindow):
