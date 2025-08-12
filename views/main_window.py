@@ -1,3 +1,5 @@
+from operator import index
+from turtle import mode
 import pandas as pd
 
 from PySide6.QtWidgets import (QWidget, QMainWindow, QSplitter, QTreeView, 
@@ -192,34 +194,39 @@ class RegistrarApp(QMainWindow):
             current_index = selected.indexes()[0]
             self.update_document_table(current_index)
     
-    def update_document_table(self, index):
+    def update_document_table(self, index, mode="normal"):
+        """Обновляет таблицу документов
+        :param index: Индекс выбранной папки
+        :param mode: Режим отображения ('normal' или 'expiring')
+        """
+        if mode == "expiring":
+            return  # В этом случае используем show_expiring_contracts
+    
         folder_name = index.data()
         parent = index.parent()
-        
+    
         if parent.isValid():
-            # This is a subfolder, we'll treat it as empty for this example
             folder_name = parent.data()
             subfolder_name = index.data()
             documents = []
         else:
-            # This is a main folder
             documents = self.folders.get(folder_name, [])
-        
+    
         self.document_model.clear()
-        self.document_model.setHorizontalHeaderLabels([
-            "Номер", "Наименование", "Контрагент", "Дата начала", "Дата окончания"
-        ])
-        
+        headers = ["Номер", "Наименование", "Контрагент", "Дата начала", "Дата окончания"]
+        self.document_model.setHorizontalHeaderLabels(headers)
+    
         for doc in documents:
+            end_date_str = doc.end_date.toString("dd.MM.yyyy") if doc.end_date else "Бессрочный"
             row = [
                 QStandardItem(doc.number),
                 QStandardItem(doc.name),
                 QStandardItem(doc.counterparty),
                 QStandardItem(doc.start_date.toString("dd.MM.yyyy")),
-                QStandardItem(doc.end_date.toString("dd.MM.yyyy") if doc.end_date else "")
+                QStandardItem(end_date_str)
             ]
             self.document_model.appendRow(row)
-        
+    
         self.status_bar.showMessage(f"Папка: {folder_name}. Документов: {len(documents)}")
     
     def get_current_folder_name(self):
