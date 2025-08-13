@@ -87,10 +87,6 @@ class RegistrarApp(QMainWindow):
         self.folder_model.appendRow(outgoing_item)
         self.folder_model.appendRow(contracts_item)
         
-        # Add some sample subfolders
-        incoming_item.appendRow(QStandardItem("2023"))
-        incoming_item.appendRow(QStandardItem("2024"))
-        
         self.folder_tree.expandAll()
         self.folder_tree.selectionModel().selectionChanged.connect(self.folder_selection_changed)
         
