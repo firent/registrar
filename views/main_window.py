@@ -1,10 +1,10 @@
 import pandas as pd
 
 from PySide6.QtWidgets import (QWidget, QMainWindow, QSplitter, QTreeView, 
-                              QTableView, QStatusBar, QFileDialog,
-                              QDialog, QVBoxLayout, QHBoxLayout, QInputDialog,
+                              QTableView, QStatusBar, QFileDialog, QDialog,
+                              QVBoxLayout, QHBoxLayout, QInputDialog,
                               QPushButton, QMessageBox, QAbstractItemView)
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QColor
 from PySide6.QtCore import QDate, Qt
 from models.document import Document
 from dialogs.document_view_dialog import DocumentViewDialog
@@ -100,8 +100,8 @@ class RegistrarApp(QMainWindow):
         
         # Document table
         self.document_table = QTableView()
-        self.document_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.document_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.document_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.document_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.document_table.doubleClicked.connect(self.view_document)
         
         self.document_model = QStandardItemModel()
@@ -260,7 +260,7 @@ class RegistrarApp(QMainWindow):
             return
         
         dialog = DocumentEditDialog(None, self)
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             new_doc = dialog.get_document()
             self.folders[folder_name].append(new_doc)
             self.update_document_table(self.folder_tree.currentIndex())
@@ -277,7 +277,7 @@ class RegistrarApp(QMainWindow):
             return
         
         dialog = DocumentEditDialog(document, self)
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             updated_doc = dialog.get_document()
             # Find and replace the document in the folder
             for i, doc in enumerate(self.folders[folder_name]):
@@ -300,10 +300,10 @@ class RegistrarApp(QMainWindow):
         reply = QMessageBox.question(
             self, "Подтверждение",
             f"Удалить документ {document.number}?",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
-        
-        if reply == QMessageBox.Yes:
+
+        if reply == QMessageBox.StandardButton.Yes:
             self.folders[folder_name].remove(document)
             self.update_document_table(self.folder_tree.currentIndex())
             self.status_bar.showMessage(f"Документ удален: {document.number}")
@@ -383,10 +383,10 @@ class RegistrarApp(QMainWindow):
             days_item = self.document_model.item(row, 4)  # Столбец "Дней осталось"
             if days_item:
                 days_left = int(days_item.text())
-                color = Qt.black  # По умолчанию
+                color = Qt.GlobalColor.black  # По умолчанию
             
                 if days_left <= 7:
-                    color = Qt.red
+                    color = Qt.GlobalColor.red  # Красный для срочных
                 elif days_left <= 14:
                     color = QColor(255, 165, 0)  # Оранжевый
             
@@ -399,7 +399,7 @@ class RegistrarApp(QMainWindow):
     
     def show_search_dialog(self):
         dialog = SearchDialog(self)
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             search_params = dialog.get_search_params()
             self.perform_search(search_params)
     
