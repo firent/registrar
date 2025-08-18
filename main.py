@@ -3,16 +3,16 @@ import os
 import shutil
 import sqlite3
 import shortuuid
-import pandas as pd
 
 from PySide6.QtWidgets import (QApplication, QWidget, QMainWindow, QSplitter, QTreeView,
                                QTableView, QStatusBar, QFileDialog, QDialog,
                                QVBoxLayout, QHBoxLayout, QInputDialog,
                                QPushButton, QMessageBox, QAbstractItemView,
                                QLabel, QTextEdit, QListWidget, QLineEdit,
-                               QDateEdit, QComboBox)
+                               QDateEdit, QComboBox, QMenu)
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QColor
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, Qt, QModelIndex
+import pandas as pd
 
 
 class Document:
@@ -334,26 +334,28 @@ class RegistrarApp(QMainWindow):
         # Инициализируем базу данных
         self.initialize_database()
 
-        # Initialize data structures
-        self.folders = {
-            "Входящие": [],
-            "Исходящие": [],
-            "Договоры": []
-        }
+        # Initialize data structures (двухуровневая структура)
+        # { "Верхняя папка": { "Подпапка": [Document, ...], ... }, ... }
+        self.folders = {}
 
-        # Create status bar
+        # Create UI (сначала создаем status_bar)
+        self.create_menus()
+        self.create_main_widgets()
         self.create_status_bar()
-            
+
         # Load data from DB
         self.load_data_from_db()
 
-        # Create UI
-        self.create_menus()
-        self.create_main_widgets()
+        # Добавляем образец, если база данных была пуста
+        if not self.folders:
+            self.add_sample_data()
 
         # Вызываем очистку после загрузки данных
         self.cleanup_orphaned_attachments()
 
+        # Подключаем контекстное меню к дереву
+        self.folder_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.folder_tree.customContextMenuRequested.connect(self.open_folder_context_menu)
 
     def initialize_database(self):
         """Создает таблицы в базе данных, если они не существуют."""
@@ -362,7 +364,8 @@ class RegistrarApp(QMainWindow):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                folder TEXT NOT NULL,
+                top_folder TEXT NOT NULL,
+                sub_folder TEXT NOT NULL,
                 number TEXT NOT NULL,
                 name TEXT NOT NULL,
                 counterparty TEXT,
@@ -391,24 +394,25 @@ class RegistrarApp(QMainWindow):
         cursor.execute('DELETE FROM attachments')
         cursor.execute('DELETE FROM documents')
 
-        for folder_name, documents in self.folders.items():
-            for doc in documents:
-                # Вставляем документ
-                cursor.execute('''
-                    INSERT INTO documents (folder, number, name, counterparty, start_date, end_date, description)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (folder_name, doc.number, doc.name, doc.counterparty,
-                      doc.start_date.toString("dd.MM.yyyy"),
-                      doc.end_date.toString("dd.MM.yyyy") if doc.end_date else None,
-                      doc.description))
-                doc.id = cursor.lastrowid # Получаем ID вставленного документа
-
-                # Вставляем вложения
-                for file_path in doc.attachments:
+        for top_folder_name, sub_folders in self.folders.items():
+            for sub_folder_name, documents in sub_folders.items():
+                for doc in documents:
+                    # Вставляем документ
                     cursor.execute('''
-                        INSERT INTO attachments (document_id, file_path)
-                        VALUES (?, ?)
-                    ''', (doc.id, file_path)) # file_path уже относительный путь
+                        INSERT INTO documents (top_folder, sub_folder, number, name, counterparty, start_date, end_date, description)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (top_folder_name, sub_folder_name, doc.number, doc.name, doc.counterparty,
+                          doc.start_date.toString("dd.MM.yyyy"),
+                          doc.end_date.toString("dd.MM.yyyy") if doc.end_date else None,
+                          doc.description))
+                    doc.id = cursor.lastrowid # Получаем ID вставленного документа
+
+                    # Вставляем вложения
+                    for file_path in doc.attachments:
+                        cursor.execute('''
+                            INSERT INTO attachments (document_id, file_path)
+                            VALUES (?, ?)
+                        ''', (doc.id, file_path)) # file_path уже относительный путь
 
         conn.commit()
         conn.close()
@@ -416,7 +420,7 @@ class RegistrarApp(QMainWindow):
 
     def load_data_from_db(self):
         """Загружает данные из базы данных в память."""
-        self.folders = {key: [] for key in self.folders} # Очищаем текущие данные
+        self.folders = {} # Очищаем текущие данные
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
@@ -425,7 +429,14 @@ class RegistrarApp(QMainWindow):
         rows = cursor.fetchall()
         doc_id_map = {} # Словарь для сопоставления DB ID с объектами Document
         for row in rows:
-            doc_id, folder, number, name, counterparty, start_date_str, end_date_str, description = row
+            doc_id, top_folder, sub_folder, number, name, counterparty, start_date_str, end_date_str, description = row
+            
+            # Убедимся, что структура папок существует
+            if top_folder not in self.folders:
+                self.folders[top_folder] = {}
+            if sub_folder not in self.folders[top_folder]:
+                self.folders[top_folder][sub_folder] = []
+
             doc = Document(
                 number=number,
                 name=name,
@@ -436,9 +447,9 @@ class RegistrarApp(QMainWindow):
                 attachments=[], # Вложения загрузим отдельно
                 db_id=doc_id
             )
-            if folder in self.folders:
-                self.folders[folder].append(doc)
-                doc_id_map[doc_id] = doc # Сохраняем ссылку на объект
+            
+            self.folders[top_folder][sub_folder].append(doc)
+            doc_id_map[doc_id] = doc # Сохраняем ссылку на объект
 
         # Загружаем вложения
         cursor.execute('SELECT document_id, file_path FROM attachments')
@@ -448,15 +459,19 @@ class RegistrarApp(QMainWindow):
                 doc_id_map[doc_id].attachments.append(file_path) # file_path уже относительный
 
         conn.close()
-        self.status_bar.showMessage("Данные загружены из базы данных.")
+        self.update_folder_tree_model() # Обновляем модель дерева после загрузки
+        # Проверяем, существует ли status_bar, чтобы избежать ошибки при инициализации
+        if hasattr(self, 'status_bar') and self.status_bar:
+            self.status_bar.showMessage("Данные загружены из базы данных.")
 
     def cleanup_orphaned_attachments(self):
         """Удаляет файлы из папки attachments, которые больше не связаны с документами."""
         # Получаем список всех файлов, связанных с документами
         connected_files = set()
-        for docs in self.folders.values():
-            for doc in docs:
-                connected_files.update(doc.attachments)
+        for top_folders in self.folders.values():
+            for docs in top_folders.values():
+                for doc in docs:
+                    connected_files.update(doc.attachments)
 
         # Получаем список всех файлов в папке attachments
         if os.path.exists(self.attachments_dir):
@@ -496,6 +511,10 @@ class RegistrarApp(QMainWindow):
 
         # Actions menu
         actions_menu = menubar.addMenu("Действия")
+        add_top_folder_action = QAction("Добавить верхнюю папку", self)
+        add_top_folder_action.triggered.connect(self.add_top_folder)
+        actions_menu.addAction(add_top_folder_action)
+        
         check_expiring_action = QAction("Проверить истекающие договоры", self)
         check_expiring_action.triggered.connect(self.show_expiring_contracts_dialog)
         actions_menu.addAction(check_expiring_action)
@@ -520,14 +539,6 @@ class RegistrarApp(QMainWindow):
         self.folder_tree.setHeaderHidden(True)
         self.folder_model = QStandardItemModel()
         self.folder_tree.setModel(self.folder_model)
-
-        # Create folder structure
-        incoming_item = QStandardItem("Входящие")
-        outgoing_item = QStandardItem("Исходящие")
-        contracts_item = QStandardItem("Договоры")
-        self.folder_model.appendRow(incoming_item)
-        self.folder_model.appendRow(outgoing_item)
-        self.folder_model.appendRow(contracts_item)
         self.folder_tree.expandAll()
         self.folder_tree.selectionModel().selectionChanged.connect(self.folder_selection_changed)
 
@@ -569,6 +580,21 @@ class RegistrarApp(QMainWindow):
         main_splitter.setSizes([200, 800])
         self.setCentralWidget(main_splitter)
 
+    def update_folder_tree_model(self):
+        """Обновляет модель дерева папок на основе self.folders"""
+        self.folder_model.clear()
+        for top_folder_name, sub_folders in self.folders.items():
+            top_item = QStandardItem(top_folder_name)
+            # top_item.setData("top", Qt.UserRole) # Можно использовать для идентификации типа
+            self.folder_model.appendRow(top_item)
+            
+            for sub_folder_name in sub_folders.keys():
+                sub_item = QStandardItem(sub_folder_name)
+                # sub_item.setData("sub", Qt.UserRole)
+                top_item.appendRow(sub_item)
+                
+        self.folder_tree.expandAll()
+
     def create_status_bar(self):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -580,20 +606,22 @@ class RegistrarApp(QMainWindow):
             self.update_document_table(current_index)
 
     def update_document_table(self, index, mode="normal"):
-        """Обновляет таблицу документов
-        :param index: Индекс выбранной папки
-        :param mode: Режим отображения ('normal' или 'expiring')
-        """
+        """Обновляет таблицу документов для выбранной подпапки"""
         if mode == "expiring":
             return  # В этом случае используем show_expiring_contracts
 
-        folder_name = index.data()
+        documents = []
+        status_msg = "Выберите вложенную папку для просмотра документов."
+
         parent = index.parent()
         if parent.isValid():
-            folder_name = parent.data()
-            # subfolder_name = index.data()
-            # documents = [] # TODO: Обработка подпапок, если нужно
-        documents = self.folders.get(folder_name, [])
+            # Выбрана вложенная папка
+            top_folder_name = parent.data()
+            sub_folder_name = index.data()
+            documents = self.folders.get(top_folder_name, {}).get(sub_folder_name, [])
+            status_msg = f"Папка: {top_folder_name} -> {sub_folder_name}. Документов: {len(documents)}"
+        # else:
+            # Выбрана верхняя папка - таблица остается пустой
 
         self.document_model.clear()
         headers = ["Номер", "Наименование", "Контрагент", "Дата начала", "Дата окончания"]
@@ -608,26 +636,29 @@ class RegistrarApp(QMainWindow):
                 QStandardItem(end_date_str)
             ]
             self.document_model.appendRow(row)
-        self.status_bar.showMessage(f"Папка: {folder_name}. Документов: {len(documents)}")
+        self.status_bar.showMessage(status_msg)
 
-    def get_current_folder_name(self):
+    def get_current_subfolder_path(self):
+        """Возвращает кортеж (top_folder_name, sub_folder_name) или (None, None)"""
         current_index = self.folder_tree.currentIndex()
         if current_index.isValid():
-            parent = current_index.parent()
-            if parent.isValid():
-                return parent.data()
-            return current_index.data()
-        return ""
+            parent_index = current_index.parent()
+            if parent_index.isValid(): # Это вложенная папка
+                top_folder_name = parent_index.data()
+                sub_folder_name = current_index.data()
+                return top_folder_name, sub_folder_name
+        return None, None
 
     def get_selected_document(self):
         selected = self.document_table.selectionModel().selectedRows()
         if not selected:
             return None
         row = selected[0].row()
-        folder_name = self.get_current_folder_name()
-        if folder_name in self.folders:
-            if row < len(self.folders[folder_name]):
-                return self.folders[folder_name][row]
+        top_folder_name, sub_folder_name = self.get_current_subfolder_path()
+        if top_folder_name and sub_folder_name:
+            documents = self.folders.get(top_folder_name, {}).get(sub_folder_name, [])
+            if 0 <= row < len(documents):
+                return documents[row]
         return None
 
     def view_document(self, index):
@@ -637,14 +668,14 @@ class RegistrarApp(QMainWindow):
             dialog.exec()
 
     def add_document(self):
-        folder_name = self.get_current_folder_name()
-        if folder_name not in self.folders:
-            QMessageBox.warning(self, "Ошибка", "Выберите папку для добавления документа")
+        top_folder_name, sub_folder_name = self.get_current_subfolder_path()
+        if not top_folder_name or not sub_folder_name:
+            QMessageBox.warning(self, "Ошибка", "Выберите вложенную папку для добавления документа")
             return
         dialog = DocumentEditDialog(None, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_doc = dialog.get_document()
-            self.folders[folder_name].append(new_doc)
+            self.folders[top_folder_name][sub_folder_name].append(new_doc)
             self.update_document_table(self.folder_tree.currentIndex())
             self.status_bar.showMessage(f"Документ добавлен: {new_doc.number}")
 
@@ -653,16 +684,17 @@ class RegistrarApp(QMainWindow):
         if not document:
             QMessageBox.warning(self, "Ошибка", "Выберите документ для редактирования")
             return
-        folder_name = self.get_current_folder_name()
-        if folder_name not in self.folders:
+        top_folder_name, sub_folder_name = self.get_current_subfolder_path()
+        if not top_folder_name or not sub_folder_name:
             return
         dialog = DocumentEditDialog(document, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             updated_doc = dialog.get_document()
             # Найдем и заменим документ в папке
-            for i, doc in enumerate(self.folders[folder_name]):
+            documents_list = self.folders[top_folder_name][sub_folder_name]
+            for i, doc in enumerate(documents_list):
                 if doc.id == updated_doc.id: # Используем ID из БД
-                    self.folders[folder_name][i] = updated_doc
+                    documents_list[i] = updated_doc
                     break
             self.update_document_table(self.folder_tree.currentIndex())
             self.status_bar.showMessage(f"Документ обновлен: {updated_doc.number}")
@@ -672,8 +704,8 @@ class RegistrarApp(QMainWindow):
         if not document:
             QMessageBox.warning(self, "Ошибка", "Выберите документ для удаления")
             return
-        folder_name = self.get_current_folder_name()
-        if folder_name not in self.folders:
+        top_folder_name, sub_folder_name = self.get_current_subfolder_path()
+        if not top_folder_name or not sub_folder_name:
             return
         reply = QMessageBox.question(
             self, "Подтверждение",
@@ -681,7 +713,7 @@ class RegistrarApp(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self.folders[folder_name].remove(document)
+            self.folders[top_folder_name][sub_folder_name].remove(document)
             # Удаляем связанные файлы из папки attachments
             for file_name in document.attachments:
                 file_path = os.path.join(self.attachments_dir, file_name)
@@ -695,17 +727,23 @@ class RegistrarApp(QMainWindow):
             self.status_bar.showMessage(f"Документ удален: {document.number}")
 
     def export_to_excel(self):
-        folder_name = self.get_current_folder_name()
-        if folder_name not in self.folders or not self.folders[folder_name]:
+        top_folder_name, sub_folder_name = self.get_current_subfolder_path()
+        if not top_folder_name or not sub_folder_name:
+            QMessageBox.warning(self, "Ошибка", "Выберите вложенную папку для экспорта")
+            return
+            
+        documents = self.folders.get(top_folder_name, {}).get(sub_folder_name, [])
+        if not documents:
             QMessageBox.warning(self, "Ошибка", "Нет документов для экспорта")
             return
+            
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Экспорт в Excel",
-            f"{folder_name}_{QDate.currentDate().toString('yyyyMMdd')}.xlsx",
+            f"{top_folder_name}_{sub_folder_name}_{QDate.currentDate().toString('yyyyMMdd')}.xlsx",
             "Excel Files (*.xlsx)"
         )
         if file_path:
-            data = [doc.to_dict() for doc in self.folders[folder_name]]
+            data = [doc.to_dict() for doc in documents]
             df = pd.DataFrame(data)
             df.to_excel(file_path, index=False)
             self.status_bar.showMessage(f"Документы экспортированы в {file_path}")
@@ -726,10 +764,12 @@ class RegistrarApp(QMainWindow):
     def show_expiring_contracts(self, days_threshold=30):
         """Показать истекающие договоры в правой панели"""
         expiring_docs = []
-        # Собираем все истекающие договоры
-        for doc in self.folders["Договоры"]:
-            if doc.is_document_expiring(days_threshold):
-                expiring_docs.append(doc)
+        # Собираем все истекающие договоры из всех подпапок "Договоры"
+        contract_subfolders = self.folders.get("Договоры", {})
+        for documents in contract_subfolders.values():
+             for doc in documents:
+                 if doc.is_document_expiring(days_threshold):
+                     expiring_docs.append(doc)
 
         # Очищаем текущую таблицу
         self.document_model.clear()
@@ -792,43 +832,46 @@ class RegistrarApp(QMainWindow):
         #     self.show_expiring_contracts(params.get("days_threshold", 30))
         #     return
         results = []
-        for folder_name, documents in self.folders.items():
-            for doc in documents:
-                match = False
-                if params["field"] == "all":
-                    # Search in all text fields
-                    search_text = params["text"].lower()
-                    if (search_text in doc.number.lower() or
-                        search_text in doc.name.lower() or
-                        search_text in doc.counterparty.lower() or
-                        search_text in doc.description.lower()):
-                        match = True
-                elif params["field"] in ["start_date", "end_date"]:
-                    # Date range search
-                    date = doc.start_date if params["field"] == "start_date" else doc.end_date
-                    if date:
-                        from_date = params["from_date"]
-                        to_date = params["to_date"]
-                        # print(f"Searching date: {date}, From: {from_date}, To: {to_date}") # Debug
-                        if from_date <= date <= to_date:
+        for top_folder_name, sub_folders in self.folders.items():
+            for sub_folder_name, documents in sub_folders.items():
+                for doc in documents:
+                    match = False
+                    if params["field"] == "all":
+                        # Search in all text fields
+                        search_text = params["text"].lower()
+                        if (search_text in doc.number.lower() or
+                            search_text in doc.name.lower() or
+                            search_text in doc.counterparty.lower() or
+                            search_text in doc.description.lower()):
                             match = True
-                else:
-                    # Field-specific text search
-                    field_value = getattr(doc, params["field"], "")
-                    if isinstance(field_value, str) and params["text"].lower() in field_value.lower():
-                         match = True
+                    elif params["field"] in ["start_date", "end_date"]:
+                        # Date range search
+                        date = doc.start_date if params["field"] == "start_date" else doc.end_date
+                        if date:
+                            from_date = params["from_date"]
+                            to_date = params["to_date"]
+                            # print(f"Searching date: {date}, From: {from_date}, To: {to_date}") # Debug
+                            if from_date <= date <= to_date:
+                                match = True
+                    else:
+                        # Field-specific text search
+                        field_value = getattr(doc, params["field"], "")
+                        if isinstance(field_value, str) and params["text"].lower() in field_value.lower():
+                             match = True
 
-                if match:
-                    results.append((folder_name, doc))
+                    if match:
+                        # Добавляем путь к папке в результаты
+                        results.append((top_folder_name, sub_folder_name, doc))
 
         # Display results in table
         self.document_model.clear()
         self.document_model.setHorizontalHeaderLabels([
-            "Папка", "Номер", "Наименование", "Контрагент", "Дата начала", "Дата окончания"
+            "Верхняя папка", "Подпапка", "Номер", "Наименование", "Контрагент", "Дата начала", "Дата окончания"
         ])
-        for folder_name, doc in results:
+        for top_folder_name, sub_folder_name, doc in results:
             row = [
-                QStandardItem(folder_name),
+                QStandardItem(top_folder_name),
+                QStandardItem(sub_folder_name),
                 QStandardItem(doc.number),
                 QStandardItem(doc.name),
                 QStandardItem(doc.counterparty),
@@ -840,11 +883,123 @@ class RegistrarApp(QMainWindow):
 
     def show_about(self):
         QMessageBox.about(self, "О программе",
-                         "Регистратор документов\nВерсия 1.1\nПрограмма для учета документов в организации.\n\nИзменения:\n- Добавлена база данных SQLite для хранения данных.\n- Добавлено управление прикрепленными файлами.")
+                         "Регистратор документов\nВерсия 1.2\nПрограмма для учета документов в организации.\n\nИзменения:\n- Добавлена база данных SQLite для хранения данных.\n- Добавлено управление прикрепленными файлами.\n- Добавлена двухуровневая структура папок.")
 
     def show_license(self):
         QMessageBox.information(self, "Лицензия",
                               "Это программа распространяется под лицензией MIT.")
+
+    # --- Новые методы для работы с папками ---
+    
+    def add_top_folder(self):
+        name, ok = QInputDialog.getText(self, "Новая верхняя папка", "Введите имя папки:")
+        if ok and name:
+            if name in self.folders:
+                QMessageBox.warning(self, "Ошибка", "Папка с таким именем уже существует.")
+                return
+            self.folders[name] = {} # Создаем пустую верхнюю папку
+            # Обновляем модель дерева
+            self.update_folder_tree_model()
+            self.status_bar.showMessage(f"Создана верхняя папка: {name}")
+
+    def add_sub_folder(self, top_folder_name):
+        if not top_folder_name or top_folder_name not in self.folders:
+             QMessageBox.warning(self, "Ошибка", "Неверная верхняя папка.")
+             return
+
+        name, ok = QInputDialog.getText(self, "Новая вложенная папка", "Введите имя папки:")
+        if ok and name:
+            if name in self.folders.get(top_folder_name, {}):
+                QMessageBox.warning(self, "Ошибка", "Подпапка с таким именем уже существует в этой папке.")
+                return
+            self.folders[top_folder_name][name] = [] # Создаем пустую подпапку
+            # Обновляем модель дерева
+            self.update_folder_tree_model()
+            self.status_bar.showMessage(f"Создана подпапка: {top_folder_name} -> {name}")
+
+    def delete_folder(self, index: QModelIndex):
+        if not index.isValid():
+            QMessageBox.warning(self, "Ошибка", "Выберите папку для удаления.")
+            return
+
+        parent_index = index.parent()
+        folder_name = index.data()
+
+        if parent_index.isValid():
+            # Удаление вложенной папки
+            top_folder_name = parent_index.data()
+            sub_folder_docs = self.folders.get(top_folder_name, {}).get(folder_name, [])
+            if sub_folder_docs:
+                QMessageBox.warning(self, "Ошибка", "Нельзя удалить непустую подпапку.")
+                return
+            # Удаление из данных
+            del self.folders[top_folder_name][folder_name]
+            # Обновляем модель дерева
+            self.update_folder_tree_model()
+            self.status_bar.showMessage(f"Удалена подпапка: {top_folder_name} -> {folder_name}")
+
+        else:
+            # Удаление верхней папки
+            top_folder_subs = self.folders.get(folder_name, {})
+            # Проверяем, есть ли непустые подпапки
+            is_empty = True
+            for docs in top_folder_subs.values():
+                if docs:
+                    is_empty = False
+                    break
+            if not is_empty:
+                QMessageBox.warning(self, "Ошибка", "Нельзя удалить непустую верхнюю папку.")
+                return
+            # Удаление из данных (даже если папка не пуста, но подпапки пусты)
+            del self.folders[folder_name]
+            # Обновляем модель дерева
+            self.update_folder_tree_model()
+            self.status_bar.showMessage(f"Удалена верхняя папка: {folder_name}")
+            
+    def open_folder_context_menu(self, position):
+        """Открывает контекстное меню для папок"""
+        index = self.folder_tree.indexAt(position)
+        if not index.isValid():
+            return
+
+        menu = QMenu()
+        parent_index = index.parent()
+        
+        if parent_index.isValid():
+            # Контекстное меню для подпапки
+            delete_action = QAction("Удалить подпапку", self)
+            delete_action.triggered.connect(lambda: self.delete_folder(index))
+            menu.addAction(delete_action)
+        else:
+            # Контекстное меню для верхней папки
+            add_sub_action = QAction("Добавить подпапку", self)
+            add_sub_action.triggered.connect(lambda: self.add_sub_folder(index.data()))
+            menu.addAction(add_sub_action)
+            
+            delete_action = QAction("Удалить верхнюю папку", self)
+            delete_action.triggered.connect(lambda: self.delete_folder(index))
+            menu.addAction(delete_action)
+
+        menu.exec(self.folder_tree.viewport().mapToGlobal(position))
+
+    def add_sample_data(self):
+        """Добавляет начальный образец данных"""
+        self.folders = {
+            "Пример": { # Верхняя папка-образец
+                "Документы": [ # Вложенная папка-образец
+                    Document(
+                        number="SAMPLE-001",
+                        name="Образец документа",
+                        counterparty="ООО Образец",
+                        start_date=QDate.currentDate(),
+                        description="Это пример документа.",
+                        attachments=[]
+                    )
+                ]
+            }
+        }
+        self.update_folder_tree_model()
+        self.status_bar.showMessage("Добавлен образец данных.")
 
 
 if __name__ == "__main__":
