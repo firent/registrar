@@ -290,15 +290,6 @@ class DocumentEditDialog(QDialog):
     def remove_attachment(self):
         current_item = self.attachments_list.currentItem()
         if current_item:
-            file_name = current_item.text()
-            # Удаляем файл из папки attachments (опционально, можно оставить)
-            # file_path = os.path.join(self.attachments_dir, file_name)
-            # if os.path.exists(file_path):
-            #     try:
-            #         os.remove(file_path)
-            #     except Exception as e:
-            #         QMessageBox.warning(self, "Ошибка", f"Не удалось удалить файл {file_name}: {e}")
-
             # Удаляем элемент из списка
             self.attachments_list.takeItem(self.attachments_list.row(current_item))
 
@@ -883,11 +874,11 @@ class RegistrarApp(QMainWindow):
 
     def show_about(self):
         QMessageBox.about(self, "О программе",
-                         "Регистратор документов\nВерсия 1.2\nПрограмма для учета документов в организации.\n\nИзменения:\n- Добавлена база данных SQLite для хранения данных.\n- Добавлено управление прикрепленными файлами.\n- Добавлена двухуровневая структура папок.")
+                         "Регистратор документов\nВерсия 1.0\nПрограмма для учета документов в организации.")
 
     def show_license(self):
         QMessageBox.information(self, "Лицензия",
-                              "Это программа распространяется под лицензией MIT.")
+                              "Это программа бесплатна для личного использования(а также для некоммерческих организаций.)\nДля использования в коммерческих целях, пожалуйста, свяжитесь с автором.\n© 2025 Иван Пожидаев")
 
     # --- Новые методы для работы с папками ---
     

@@ -17,11 +17,11 @@ VSVersionInfo(
           u'040904B0',
           [
             StringStruct(u'CompanyName', u'Ivan Pozhidaev'),
-            StringStruct(u'FileDescription', u'Office Document Registrar app'),
+            StringStruct(u'FileDescription', u'Document Registrar app'),
             StringStruct(u'FileVersion', u'0.1.0'),
-            StringStruct(u'InternalName', u'Office Document Registrar'),
+            StringStruct(u'InternalName', u'Document Registrar'),
             StringStruct(u'LegalCopyright', u'Ivan Pozhidaev'),
-            StringStruct(u'ProductName', u'Office Document Registrar'),
+            StringStruct(u'ProductName', u'Document Registrar'),
             StringStruct(u'ProductVersion', u'0.1.0'),
             StringStruct(u'ApplicationName', u'Registrar.exe')
           ]
