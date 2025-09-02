@@ -57,6 +57,7 @@ registrar/
 
 - **Зависимости перечислены в файле `requirements.txt`**:
   - PySide6
+  - sqlalchemy
   - pandas
   - openpyxl
   - shortuuid
