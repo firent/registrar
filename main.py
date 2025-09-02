@@ -45,7 +45,6 @@ class Document:
         if not self.end_date:
             return False
         days_left = QDate.currentDate().daysTo(self.end_date)
-        # print(f"Document {self.number}: Days left = {days_left}, Threshold = {days_threshold}") # Debug
         return 0 <= days_left <= days_threshold # Истекающий = осталось от 0 до threshold дней
 
     def to_dict(self):
@@ -381,7 +380,7 @@ class RegistrarApp(QMainWindow):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        # Очистка существующих данных (простой способ, можно сделать более умное обновление)
+        # Очистка существующих данных
         cursor.execute('DELETE FROM attachments')
         cursor.execute('DELETE FROM documents')
 
@@ -819,9 +818,6 @@ class RegistrarApp(QMainWindow):
             self.perform_search(search_params)
 
     def perform_search(self, params):
-        # if params.get("special_search") == "expiring_contracts": # Эта часть кода была лишней
-        #     self.show_expiring_contracts(params.get("days_threshold", 30))
-        #     return
         results = []
         for top_folder_name, sub_folders in self.folders.items():
             for sub_folder_name, documents in sub_folders.items():
@@ -873,14 +869,24 @@ class RegistrarApp(QMainWindow):
         self.status_bar.showMessage(f"Найдено документов: {len(results)}")
 
     def show_about(self):
-        QMessageBox.about(self, "О программе",
-                         "Регистратор документов\nВерсия 1.0\nПрограмма для учета документов в организации.")
+        text = """
+            <b>Регистратор документов 1.2</b><br><br>
+            Программа для учета и управления документами.<br>
+            Автор: Иван Пожидаев, 2025 г.<br><br>
+            """
+        QMessageBox.about(self, "О программе", text)
 
     def show_license(self):
-        QMessageBox.information(self, "Лицензия",
-                              "Это программа бесплатна для личного использования(а также для некоммерческих организаций.)\nДля использования в коммерческих целях, пожалуйста, свяжитесь с автором.\n© 2025 Иван Пожидаев")
+        license_text = """
+            Разрешается свободное использование для личных нужд и для некоммерческих организаций.<br>
+            Программа распространяется "как есть", без каких-либо гарантий.<br>
+            Подробнее в файле LICENSE.<br><br>
+            Copyright (c) 2025 Иван Пожидаев<br>
+            Email: ivan@ivanpozhidaev.ru<br><br>
+            """
+        QMessageBox.information(self, "Лицензия", license_text)
 
-    # --- Новые методы для работы с папками ---
+    # --- Методы для работы с папками ---
     
     def add_top_folder(self):
         name, ok = QInputDialog.getText(self, "Новая верхняя папка", "Введите имя папки:")
