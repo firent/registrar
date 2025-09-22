@@ -66,7 +66,7 @@ class SearchDialog(QDialog):
         self.resize(400, 200)
         layout = QVBoxLayout()
 
-        # Search field selection
+        # Выбор поля для поиска
         self.field_combo = QComboBox()
         self.field_combo.addItem("Все поля", "all")
         self.field_combo.addItem("Номер документа", "number")
@@ -77,12 +77,12 @@ class SearchDialog(QDialog):
         self.field_combo.addItem("Описание", "description")
         layout.addWidget(self.field_combo)
 
-        # Search text
+        # Текст для поиска
         self.search_edit = QLineEdit()
         layout.addWidget(QLabel("Текст для поиска:"))
         layout.addWidget(self.search_edit)
 
-        # Date range for date fields
+        # Диапазон дат для полей с датой
         self.date_range_layout = QHBoxLayout()
         self.date_range_layout.addWidget(QLabel("От:"))
         self.from_date_edit = QDateEdit()
@@ -101,10 +101,10 @@ class SearchDialog(QDialog):
         self.date_range_widget.hide()
         layout.addWidget(self.date_range_widget)
 
-        # Connect field change to show/hide date range
+        # Подключаем изменение поля с показом/скрытием диапазона дат
         self.field_combo.currentIndexChanged.connect(self.update_field_visibility)
 
-        # Search button
+        # Кнопка поиска
         self.search_button = QPushButton("Поиск")
         self.search_button.clicked.connect(self.accept)
         layout.addWidget(self.search_button)
@@ -139,7 +139,7 @@ class DocumentViewDialog(QDialog):
         self.document = document
         layout = QVBoxLayout()
 
-        # Document fields
+        # Поля документа
         self.number_label = QLabel(f"Номер: {document.number}")
         self.name_label = QLabel(f"Наименование: {document.name}")
         self.counterparty_label = QLabel(f"Контрагент: {document.counterparty}")
@@ -151,21 +151,21 @@ class DocumentViewDialog(QDialog):
         layout.addWidget(self.start_date_label)
         layout.addWidget(self.end_date_label)
 
-        # Description
+        # Описание
         layout.addWidget(QLabel("Описание:"))
         self.description_text = QTextEdit()
         self.description_text.setPlainText(document.description)
         self.description_text.setReadOnly(True)
         layout.addWidget(self.description_text)
 
-        # Attachments
+        # Вложения
         layout.addWidget(QLabel("Приложенные документы:"))
         self.attachments_list = QListWidget()
         self.attachments_list.addItems(document.attachments)
         self.attachments_list.itemDoubleClicked.connect(self.open_attachment)
         layout.addWidget(self.attachments_list)
 
-        # Close button
+        # кнопка закрытия
         self.close_button = QPushButton("Закрыть")
         self.close_button.clicked.connect(self.accept)
         layout.addWidget(self.close_button)
@@ -203,7 +203,7 @@ class DocumentEditDialog(QDialog):
 
         layout = QVBoxLayout()
 
-        # Document fields
+        # Поля документа
         fields_layout = QVBoxLayout()
         self.number_edit = QLineEdit(self.document.number)
         self.add_field(fields_layout, "Номер документа:", self.number_edit)
@@ -227,19 +227,19 @@ class DocumentEditDialog(QDialog):
         self.add_field(fields_layout, "Дата окончания:", self.end_date_edit)
         layout.addLayout(fields_layout)
 
-        # Description
+        # Описание
         layout.addWidget(QLabel("Описание:"))
         self.description_edit = QTextEdit(self.document.description)
         layout.addWidget(self.description_edit)
 
-        # Attachments
+        # Вложения
         layout.addWidget(QLabel("Приложенные документы:"))
         self.attachments_list = QListWidget()
         # Отображаем только имена файлов, не полные пути
         self.attachments_list.addItems([os.path.basename(f) for f in self.document.attachments])
         layout.addWidget(self.attachments_list)
 
-        # Buttons for attachments
+        # Кнопки для добавления/удаления вложений
         buttons_layout = QHBoxLayout()
         self.add_attachment_button = QPushButton("Добавить")
         self.add_attachment_button.clicked.connect(self.add_attachment)
@@ -249,7 +249,7 @@ class DocumentEditDialog(QDialog):
         buttons_layout.addWidget(self.remove_attachment_button)
         layout.addLayout(buttons_layout)
 
-        # Dialog buttons
+        # Кнопки OK/Отмена
         buttons_layout = QHBoxLayout()
         self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self.accept)
@@ -324,16 +324,16 @@ class RegistrarApp(QMainWindow):
         # Инициализируем базу данных
         self.initialize_database()
 
-        # Initialize data structures (двухуровневая структура)
+        # Инициализируем структуру папок (двухуровневая структура)
         # { "Верхняя папка": { "Подпапка": [Document, ...], ... }, ... }
         self.folders = {}
 
-        # Create UI (сначала создаем status_bar)
+        # Создаем UI (сначала создаем status_bar)
         self.create_menus()
         self.create_main_widgets()
         self.create_status_bar()
 
-        # Load data from DB
+        # Загружаем данные из базы данных
         self.load_data_from_db()
 
         # Добавляем образец, если база данных была пуста
@@ -490,7 +490,7 @@ class RegistrarApp(QMainWindow):
 
     def create_menus(self):
         menubar = self.menuBar()
-        # File menu
+        # Меню Файл
         file_menu = menubar.addMenu("Файл")
         export_action = QAction("Экспорт в Excel", self)
         export_action.triggered.connect(self.export_to_excel)
@@ -499,7 +499,7 @@ class RegistrarApp(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        # Actions menu
+        # Меню Действия
         actions_menu = menubar.addMenu("Действия")
         add_top_folder_action = QAction("Добавить верхнюю папку", self)
         add_top_folder_action.triggered.connect(self.add_top_folder)
@@ -512,7 +512,7 @@ class RegistrarApp(QMainWindow):
         search_action.triggered.connect(self.show_search_dialog)
         actions_menu.addAction(search_action)
 
-        # Help menu
+        # Меню Помощь
         help_menu = menubar.addMenu("Помощь")
         about_action = QAction("О программе", self)
         about_action.triggered.connect(self.show_about)
@@ -524,7 +524,7 @@ class RegistrarApp(QMainWindow):
     def create_main_widgets(self):
         main_splitter = QSplitter()
 
-        # Left side - folder tree
+        # Левая панель - дерево папок
         self.folder_tree = QTreeView()
         self.folder_tree.setHeaderHidden(True)
         self.folder_model = QStandardItemModel()
@@ -532,11 +532,11 @@ class RegistrarApp(QMainWindow):
         self.folder_tree.expandAll()
         self.folder_tree.selectionModel().selectionChanged.connect(self.folder_selection_changed)
 
-        # Right side - document table and buttons
+        # Правая панель - таблица документов и кнопки
         right_widget = QWidget()
         right_layout = QVBoxLayout()
 
-        # Document table
+        # Таблица документов
         self.document_table = QTableView()
         self.document_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.document_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -549,7 +549,7 @@ class RegistrarApp(QMainWindow):
         self.document_table.horizontalHeader().setStretchLastSection(True)
         right_layout.addWidget(self.document_table)
 
-        # Buttons
+        # Кнопки
         buttons_layout = QHBoxLayout()
         self.add_button = QPushButton("Добавить")
         self.add_button.clicked.connect(self.add_document)
@@ -564,7 +564,7 @@ class RegistrarApp(QMainWindow):
 
         right_widget.setLayout(right_layout)
 
-        # Add widgets to splitter
+        # Добавляем панели в сплиттер
         main_splitter.addWidget(self.folder_tree)
         main_splitter.addWidget(right_widget)
         main_splitter.setSizes([200, 800])
@@ -850,7 +850,7 @@ class RegistrarApp(QMainWindow):
                         # Добавляем путь к папке в результаты
                         results.append((top_folder_name, sub_folder_name, doc))
 
-        # Display results in table
+        # Показываем результаты в правой панели
         self.document_model.clear()
         self.document_model.setHorizontalHeaderLabels([
             "Верхняя папка", "Подпапка", "Номер", "Наименование", "Контрагент", "Дата начала", "Дата окончания"
