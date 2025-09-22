@@ -878,11 +878,11 @@ class RegistrarApp(QMainWindow):
 
     def show_license(self):
         license_text = """
-            Разрешается свободное использование для личных нужд и для некоммерческих организаций.<br>
+            GNU General Public License v3.0<br>
             Программа распространяется "как есть", без каких-либо гарантий.<br>
             Подробнее в файле LICENSE.<br><br>
             Copyright (c) 2025 Иван Пожидаев<br>
-            Email: ivan@ivanpozhidaev.ru<br><br>
+            github: <a href='https://github.com/firent/registrar'>https://github.com/firent/registrar</a><br>
             """
         QMessageBox.information(self, "Лицензия", license_text)
 
